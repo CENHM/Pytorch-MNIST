@@ -31,15 +31,19 @@ class DigitRecognition(nn.Module):
         '''
         self.conv1 = nn.Conv2d(1, 10, 5)
         self.conv2 = nn.Conv2d(10, 20, 3)
-        self.fc1   = nn.Linear(20 * 10 * 10, 500)
-        self.fc2   = nn.Linear(500, 10)
+        self.fc1   = nn.Linear(500, 200)
+        self.fc2   = nn.Linear(200, 10)
+        self.dropout = nn.Dropout(p=0.5)
+        self.bn1 = nn.BatchNorm2d(10)
+        self.bn2 = nn.BatchNorm2d(20)
         
     def forward(self, x):
         batch_size = x.size(0)
         # input : batch size * 1 * 28 * 28
         x = self.conv1(x)
-        # (length - kernel size + 2 * padding) / stride + 1 24 - 13
+        # (length - kernel size + 2 * padding) / stride + 1
         # output: batch size * 10 * 24 * 24
+        x = self.bn1(x)
         x = F.relu(x)
         # input : batch size * 10 * 24 * 24
         x = F.max_pool2d(x, 2, 2)
@@ -48,16 +52,21 @@ class DigitRecognition(nn.Module):
         # input : batch size * 10 * 12 * 12
         x = self.conv2(x)
         # output: batch size * 20 * 10 * 10
+        x = self.bn2(x)
         x = F.relu(x)
+        # input: batch size * 20 * 10 * 10
+        x = F.max_pool2d(x, 2, 2)
+        # output: batch size * 20 * 5 * 5
         
-        # dim = 20 * 10 * 10 = 2000
+        # dim = 500
         x = x.view(batch_size, -1)
         
-        # input : batch size * 2000
-        x = self.fc1(x)
-        # output: batch size * 500
-        x = F.relu(x)
         # input : batch size * 500
+        x = self.fc1(x)
+        # output: batch size * 200
+        x = self.dropout(x)
+        x = F.relu(x)
+        # input : batch size * 200
         x = self.fc2(x)
         # output: batch size * 10
         
@@ -68,8 +77,7 @@ class DigitRecognition(nn.Module):
 def train_model(model, device, train_loader, optimizer, epoch):
     # Sets the module in training mode.
     model.train()
-    # batch_size = 100, total 5000 batch.
-    # image.shape = [100, 1, 28, 28], label.shape = [100]
+    # image.shape = [batch_size, 1, 28, 28], label.shape = [batch_size]
     for batch_idx, (image, label) in enumerate(train_loader):
         image, label = image.to(device), label.to(device)
         # Set the gradient of the parameters in the model to 0.
@@ -84,7 +92,7 @@ def train_model(model, device, train_loader, optimizer, epoch):
         loss.backward()
         # Update the values of parameters by gradient descent.
         optimizer.step()
-        if batch_idx % 2500 == 0:
+        if batch_idx % 1000 == 0:
             print("Train Epoch: {} \t Loss: {:0.6f}".format(epoch, loss.item()))
           
             
@@ -108,7 +116,7 @@ def evalu_model(model, device, test_loader):
 
 if __name__ == "__main__":
 
-    BATCH_SIZE = 100
+    BATCH_SIZE = 32
     EPOCHS = 10
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -153,33 +161,19 @@ if __name__ == "__main__":
             train (bool, optional) : If True, creates train dataset, else create test dataset;
          	download (bool, optional) : If True, downloads the dataset from the internet and puts it in root directory;
           	transform (callable, optional) : A function/transform that takes in an PIL image and returns a transformed version
-        
-    class torch.utils.data.DataLoader():
-        Combines a dataset and a sampler, and provides an iterable over the given dataset.
-        Parameters:
-            dataset (Dataset) : Dataset from which to load the data;
-            batch_size (int, optional) : How many samples per batch to load;
-            shuffle (bool, optional) : Set to True to have the data reshuffled at every epoch;
     '''
     train_data = datasets.MNIST("data",
                                 train=True,
                                 download=True,
                                 transform=pipeline
                                 )
-    train_loader = DataLoader(train_data,
-                              batch_size=BATCH_SIZE,
-                              shuffle=True
-                              )
+    
     evalu_data = datasets.MNIST("data",
                                train=False,
                                download=True,
                                transform=pipeline
                                )
-    evalu_loader  = DataLoader(evalu_data,
-                               batch_size=BATCH_SIZE,
-                               shuffle=True
-                               )
-
+    
     # Inspect the images in the dataset 
     # 
     # with open("./data/MNIST/raw/train-images-idx3-ubyte", "rb") as f:
@@ -207,6 +201,22 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters())
     
     for epoch in range (1, EPOCHS + 1):
+        '''   
+    	class torch.utils.data.DataLoader():
+        	Combines a dataset and a sampler, and provides an iterable over the given dataset.
+        	Parameters:
+        	    dataset (Dataset) : Dataset from which to load the data;
+        	    batch_size (int, optional) : How many samples per batch to load;
+         	   shuffle (bool, optional) : Set to True to have the data reshuffled at every epoch;
+        '''
+        train_loader = DataLoader(train_data,
+                              	  batch_size=BATCH_SIZE,
+                                  shuffle=True
+                                  )
+        evalu_loader = DataLoader(evalu_data,
+                               	  batch_size=BATCH_SIZE,
+                                  shuffle=True
+                                  )
+        
         train_model(model, DEVICE, train_loader, optimizer, epoch)
         evalu_model(model, DEVICE, evalu_loader)
-    
