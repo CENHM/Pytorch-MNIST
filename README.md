@@ -1,7 +1,7 @@
 # Pytorch-MNIST
 Simple handwritten digits classification base on MNIST with Pytorch (with detailed annotation).
 
-$Accuracy \approx 99.0$
+$Accuracy \approx 99$
 
 # Requirments
 Python3  
